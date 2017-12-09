@@ -23,7 +23,7 @@ class MNISTTask(object):
 			files = os.listdir(d)
 			all_ids.append([str(i) + '/' + f[:-4] for f in files])
 
-		self.label_map = dict(zip(range(10, np.random.permutation(np.array(range(10))))))
+		self.label_map = dict(zip(range(10), np.random.permutation(np.array(range(10)))))
 
 		self.train_ids = []
 		self.val_ids = []

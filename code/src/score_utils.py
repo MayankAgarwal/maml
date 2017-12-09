@@ -7,10 +7,10 @@ def count_correct(pred, target):
 	pairs = [int(x==y) for (x, y) in zip(pred, target)]
 	return sum(pairs)
 
-def forward_pass(net, in_, target, weights=None, dtype=torch.FloatTensor):
+def forward_pass(net, in_, target, weights=None, dtype=torch.FloatTensor, long_dtype=torch.LongTensor):
 
 	input_var = Variable(in_).type(dtype)
-	target_var = Variable(target).type(dtype)
+	target_var = Variable(target).type(long_dtype)
 	out = net.net_forward(input_var, weights)
 	loss = net.loss_fn(out, target_var)
 	return loss, out

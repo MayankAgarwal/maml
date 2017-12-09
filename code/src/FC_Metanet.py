@@ -15,7 +15,7 @@ class FC_MetaNet(FC_Net):
 	Meta-network FC Net
 	"""
 
-	def __init__(self, num_classes, input_dim, loss_fn, num_meta_updates, step_size, batch_size, meta_batch_size, dtype=torch.FloatTensor):
+	def __init__(self, num_classes, input_dim, loss_fn, num_meta_updates, step_size, batch_size, meta_batch_size, dtype=torch.FloatTensor, long_dtype=torch.LongTensor):
 
 		super(FC_MetaNet, self).__init__(num_classes, input_dim, loss_fn, dtype)
 
@@ -24,13 +24,14 @@ class FC_MetaNet(FC_Net):
 		self.batch_size = batch_size
 		self.meta_batch_size = meta_batch_size
 		self.dtype = dtype
+		self.long_dtype = long_dtype
 
 	def net_forward(self, x, weights=None):
 		return super(FC_MetaNet, self).forward(x, weights)
 
 	def forward_pass(self, in_, target, weights=None):
 		input_var = Variable(in_).type(self.dtype)
-		target_var = Variable(target).type(self.dtype)
+		target_var = Variable(target).type(self.long_dtype)
 		out = self.net_forward(input_var, weights)
 		loss = self.loss_fn(out, target_var)
 		return loss, out
@@ -57,7 +58,7 @@ class FC_MetaNet(FC_Net):
 				loss, _ = self.forward_pass(in_, target, metanet_weights)
 				grads = torch.autograd.grad(loss, metanet_weights.values(), create_graph=True)
 
-			metanet_weights = OrderedDict((name, param - self.step_size*grad) for ((name, param), grad) in zip(metanet_weights.items(), grads)
+			metanet_weights = OrderedDict((name, param - self.step_size*grad) for ((name, param), grad) in zip(metanet_weights.items(), grads))
 
 		tr_post_loss, tr_post_acc = evaluate(self, train_loader, metanet_weights)
 		val_post_loss, val_post_acc = evaluate(self, val_loader, metanet_weights)

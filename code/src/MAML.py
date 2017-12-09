@@ -15,6 +15,8 @@ from dataloader_utils import *
 from FewShotTasks import MNISTTask
 from FewShotDatasets import MNIST
 
+import sys, os
+
 class MAML(object):
 
 	def __init__(self,
@@ -36,6 +38,7 @@ class MAML(object):
 		self.loss_fn = loss_fn
 		self.is_cuda = torch.cuda.is_available()
 		self.dtype = torch.cuda.FloatTensor if self.is_cuda else torch.FloatTensor
+		self.longTensor = torch.cuda.LongTensor if self.is_cuda else torch.LongTensor
 
 		self.__init_nets__()
 		self.opt = Adam(self.net.parameters(), lr=meta_step_size)
@@ -58,7 +61,7 @@ class MAML(object):
 
 
 		self.net = FC_Net(self.num_classes, input_dim, self.loss_fn, self.dtype)
-		self.metanet = FC_MetaNet(self.num_classes, input_dim, self.loss_fn, self.num_inner_updates, self.inner_step_size, self.meta_batch_size, self.dtype)
+		self.metanet = FC_MetaNet(self.num_classes, input_dim, self.loss_fn, self.num_inner_updates, self.inner_step_size, self.inner_batch_size, self.meta_batch_size, self.dtype)
 
 		if self.is_cuda:
 			self.net.cuda()
@@ -95,7 +98,7 @@ class MAML(object):
 
 			for i in xrange(self.num_inner_updates):
 				in_, target = train_loader.__iter__().next()
-				loss, _ = forward_pass(test_net, in_, target, dtype=self.dtype)
+				loss, _ = forward_pass(test_net, in_, target, dtype=self.dtype, long_dtype=self.longTensor)
 				test_opt.zero_grad()
 				loss.backward()
 				test_opt.step()
@@ -161,44 +164,44 @@ class MAML(object):
 			val_loss.append(vall/self.meta_batch_size)
 			val_acc.append(vala/self.meta_batch_size)
 
-			np.save('../output/{}/tr_loss.npy'.format(exp), np.array(tr_loss))
-            np.save('../output/{}/tr_acc.npy'.format(exp), np.array(tr_acc))
-            np.save('../output/{}/val_loss.npy'.format(exp), np.array(val_loss))
-            np.save('../output/{}/val_acc.npy'.format(exp), np.array(val_acc))
+			np.save('../output/{}/tr_loss.npy'.format(expid), np.array(tr_loss))
+			np.save('../output/{}/tr_acc.npy'.format(expid), np.array(tr_acc))
+			np.save('../output/{}/val_loss.npy'.format(expid), np.array(val_loss))
+			np.save('../output/{}/val_acc.npy'.format(expid), np.array(val_acc))
 
-            np.save('../output/{}/meta_tr_loss.npy'.format(exp), np.array(mtr_loss))
-            np.save('../output/{}/meta_tr_acc.npy'.format(exp), np.array(mtr_acc))
-            np.save('../output/{}/meta_val_loss.npy'.format(exp), np.array(mval_loss))
-            np.save('../output/{}/meta_val_acc.npy'.format(exp), np.array(mval_acc))
+			np.save('../output/{}/meta_tr_loss.npy'.format(expid), np.array(mtr_loss))
+			np.save('../output/{}/meta_tr_acc.npy'.format(expid), np.array(mtr_acc))
+			np.save('../output/{}/meta_val_loss.npy'.format(expid), np.array(mval_loss))
+			np.save('../output/{}/meta_val_acc.npy'.format(expid), np.array(mval_acc))
 
 
-    def meta_update(self, task, metagrads):
+	def meta_update(self, task, metagrads):
 
-    	print '\nMeta-update \n'
+		print '\nMeta-update \n'
 
-    	loader = get_data_loader(task, self.inner_batch_size, split='val')
-    	in_, target = loader.__iter__().next()
+		loader = get_data_loader(task, self.inner_batch_size, split='val')
+		in_, target = loader.__iter__().next()
 
-    	loss, out = forward_pass(self.net, in_, target)
+		loss, out = forward_pass(self.net, in_, target)
 
-    	gradients = {k: sum(d[k] for d in metagrads) for k in metagrads[0].keys()}
+		gradients = {k: sum(d[k] for d in metagrads) for k in metagrads[0].keys()}
 
-    	hooks = []
-    	for (k, v) in self.net.named_parameters():
-    		def get_closure():
-    			key = k
-    			def replace_grad(grad):
-    				return gradients[key]
-    			return replace_grad
+		hooks = []
+		for (k, v) in self.net.named_parameters():
+			def get_closure():
+				key = k
+				def replace_grad(grad):
+					return gradients[key]
+				return replace_grad
 
-    		hooks.append(v.register_hook(get_closure()))
+			hooks.append(v.register_hook(get_closure()))
 
-    	self.opt.zero_grad()
-    	loss.backward()
-    	self.opt.step()
+		self.opt.zero_grad()
+		loss.backward()
+		self.opt.step()
 
-    	for h in hooks:
-    		h.remove()
+		for h in hooks:
+			h.remove()
 
 
 def main(expid, dataset, net_type, num_cls, num_insts, batch, m_batch, num_updates, num_inner_updates, lr, meta_lr):
@@ -207,10 +210,25 @@ def main(expid, dataset, net_type, num_cls, num_insts, batch, m_batch, num_updat
 
 	try:
 		os.makedirs(output)
-	except Exception as _:
-		pass
+	except Exception as err:
+		print err
 
 	loss_fn = CrossEntropyLoss()
 	learner = MAML(dataset, net_type, num_cls, num_insts, m_batch, float(meta_lr), batch, float(lr), num_updates, num_inner_updates, loss_fn)
 	learner.train(expid)
+
+if __name__ == "__main__":
+	expid = sys.argv[1]
+	dataset = sys.argv[2]	# mnist
+	net_type = sys.argv[3]	# fc-full
+	num_cls = int(sys.argv[4])
+	num_insts = int(sys.argv[5])
+	batch = int(sys.argv[6])	# Inner batch size
+	m_batch = int(sys.argv[7])	# Meta batch size
+	num_updates = int(sys.argv[8]) # Number of updates
+	num_inner_updates = int(sys.argv[9])	# Number of inner updates
+	lr = float(sys.argv[10])	# Learning rate
+	meta_lr = float(sys.argv[11])	# Meta learning rate
+
+	main(expid, dataset, net_type, num_cls, num_insts, batch, m_batch, num_updates, num_inner_updates, lr, meta_lr)
 

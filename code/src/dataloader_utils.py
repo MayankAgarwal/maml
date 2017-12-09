@@ -41,8 +41,8 @@ def get_data_loader(task, batch_size=1, split='train'):
 	# NOTE: Batch size is num instances per class
 	
 	if task.dataset == 'mnist':
-		normalize = transforms.Normalize(mean=[0.13066, 0.13066, 0.13066], std=[0.30131, 0.30131, 0.30131])
-		dset = MNIST(task, transforms=transforms.Compose([transforms.ToTensor(), normalize]), split=split)
+		#normalize = transforms.Normalize(mean=[0.13066, 0.13066, 0.13066], std=[0.30131, 0.30131, 0.30131])
+		dset = MNIST(task, transforms=None, split=split)
 
 	batch_cutoff = None if split!='train' else batch_size
 

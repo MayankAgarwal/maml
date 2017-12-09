@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch.nn import Functional as F
+from torch.nn import functional as F
 from collections import OrderedDict
 import numpy as np
 
@@ -48,7 +48,7 @@ class FC_Net(nn.Module):
 		if weights == None:
 			# Main net trains here
 			x = self.layers(x)
-			x = self.fc(x)
+			x = self.fc_out(x)
 		else:
 			# This code block is used by the meta-network
 			x = self.__linear(x, weight=weights['layers.fc1.weight'], bias=weights['layers.fc1.bias'])
