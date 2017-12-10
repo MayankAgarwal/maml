@@ -6,14 +6,18 @@ import torch.nn as nn
 from torch.autograd import Variable
 from torch.nn import Parameter
 from torch.optim import SGD, Adam
-from torch.nn.modules.loss import CrossEntropyLoss
+from torch.nn.modules.loss import CrossEntropyLoss, MSELoss
 
 from FC_Net import FC_Net
 from FC_Metanet import FC_MetaNet
+from ConvNet import ConvNet
+from ConvMetaNet import ConvMetaNet
+
+
 from score_utils import *
 from dataloader_utils import *
-from FewShotTasks import MNISTTask
-from FewShotDatasets import MNIST
+from FewShotTasks import MNISTTask, SinusoidTask, OmniglotTask
+from FewShotDatasets import MNIST, Sinusoidal, Omniglot
 
 import sys, os
 
@@ -47,22 +51,53 @@ class MAML(object):
 
 		if self.net_type == 'fc-full':
 			self.__init_fc_nets__()
+		elif self.net_type == 'convnet':
+			self.__init_conv_nets__()
+
 
 	def __get_test_net__(self):
 
 		if self.net_type == 'fc-full':
 			return self.__get_fc_test_net__()
+		if self.net_type == 'convnet':
+			return self.__get_conv_test_net__()
 
+	def __init_conv_nets__(self):
+
+		if self.dataset == 'omniglot':
+			input_channels = 3
+
+		self.net = ConvNet(self.num_classes, input_channels, self.loss_fn, self.dtype)
+		self.metanet = ConvMetaNet(self.num_classes, input_channels, self.loss_fn, self.num_inner_updates, self.inner_step_size, self.inner_batch_size, self.meta_batch_size, self.dtype, self.longTensor)
+
+		if self.is_cuda:
+			self.net.cuda()
+			self.metanet.cuda()
+
+	def __get_conv_test_net__(self):
+
+		if self.dataset == 'omniglot':
+			input_channels = 3
+
+		test_net = ConvNet(self.num_classes, input_channels, self.loss_fn, self.dtype)
+
+		if self.is_cuda:
+			test_net.cuda()
+
+		return test_net
 
 	def __init_fc_nets__(self):
 
 		if self.dataset == 'mnist':
 			input_dim = 28*28
+		elif self.dataset == 'sinusoid':
+			input_dim = 1
+		elif self.dataset == 'omniglot':
+			input_dim = 28*28*3
 
 
 		self.net = FC_Net(self.num_classes, input_dim, self.loss_fn, self.dtype)
-		self.metanet = FC_MetaNet(self.num_classes, input_dim, self.loss_fn, self.num_inner_updates, self.inner_step_size, self.inner_batch_size, self.meta_batch_size, self.dtype)
-
+		self.metanet = FC_MetaNet(self.num_classes, input_dim, self.loss_fn, self.num_inner_updates, self.inner_step_size, self.inner_batch_size, self.meta_batch_size, self.dtype, self.longTensor)
 		if self.is_cuda:
 			self.net.cuda()
 			self.metanet.cuda()
@@ -71,8 +106,16 @@ class MAML(object):
 
 		if self.dataset == "mnist":
 			input_dim = 28*28
+		elif self.dataset == 'sinusoid':
+			input_dim = 1
+		elif self.dataset == 'omniglot':
+			input_dim = 28*28*3
 
 		test_net = FC_Net(self.num_classes, input_dim, self.loss_fn, self.dtype)
+
+		if self.is_cuda:
+			test_net.cuda()
+
 		return test_net
 
 
@@ -80,6 +123,10 @@ class MAML(object):
 
 		if 'mnist' in root:
 			return MNISTTask(root, n_cls, n_inst, split)
+		if 'sinusoid' in root:
+			return SinusoidTask(n_inst, split=split)
+		if 'omniglot' in root:
+			return OmniglotTask(root, n_cls, n_inst, split)
 
 
 	def test(self):
@@ -89,8 +136,6 @@ class MAML(object):
 
 		for _ in xrange(10):
 			test_net.load_state_dict(self.net.state_dict())
-			if self.is_cuda:
-				test_net.cuda()
 
 			test_opt = SGD(test_net.parameters(), lr=self.inner_step_size)
 			task = self.get_task('../data/{}'.format(self.dataset), self.num_classes, self.num_insts, split='test')
@@ -103,9 +148,9 @@ class MAML(object):
 				loss.backward()
 				test_opt.step()
 
-			tloss, tacc = evaluate(test_net, train_loader)
+			tloss, tacc = evaluate(test_net, train_loader, dtype=self.dtype, long_dtype=self.longTensor)
 			val_loader = get_data_loader(task, self.inner_batch_size, split='val')
-			vloss, vacc = evaluate(test_net, val_loader)
+			vloss, vacc = evaluate(test_net, val_loader, dtype=self.dtype, long_dtype=self.longTensor)
 
 			mtr_loss += tloss
 			mtr_acc += tacc
@@ -132,6 +177,8 @@ class MAML(object):
 
 		for it in xrange(self.num_updates):
 
+			print "\n====> Training iteration (main net): ", it
+
 			mt_loss, mt_acc, mv_loss, mv_acc = self.test()
 			mtr_loss.append(mt_loss)
 			mtr_acc.append(mt_acc)
@@ -156,13 +203,16 @@ class MAML(object):
 			print "Meta update: ", it
 			self.meta_update(task, grads)
 
-			if it%500 == 0:
+			if it%250 == 0:
 				torch.save(self.net.state_dict(), '../output/{}/train_iter_{}.pth'.format(expid, it))
 
 			tr_loss.append(tloss/self.meta_batch_size)
 			tr_acc.append(tacc/self.meta_batch_size)
-			val_loss.append(vall/self.meta_batch_size)
-			val_acc.append(vala/self.meta_batch_size)
+			val_loss.append(vloss/self.meta_batch_size)
+			val_acc.append(vacc/self.meta_batch_size)
+
+			print "Training Loss: ", tr_loss[-1], " Accuracy: ", tr_acc[-1]
+			print "Validation Loss: ", val_loss[-1], " Accuracy: ", val_acc[-1]
 
 			np.save('../output/{}/tr_loss.npy'.format(expid), np.array(tr_loss))
 			np.save('../output/{}/tr_acc.npy'.format(expid), np.array(tr_acc))
@@ -182,7 +232,7 @@ class MAML(object):
 		loader = get_data_loader(task, self.inner_batch_size, split='val')
 		in_, target = loader.__iter__().next()
 
-		loss, out = forward_pass(self.net, in_, target)
+		loss, out = forward_pass(self.net, in_, target, dtype=self.dtype, long_dtype=self.longTensor)
 
 		gradients = {k: sum(d[k] for d in metagrads) for k in metagrads[0].keys()}
 
@@ -204,7 +254,7 @@ class MAML(object):
 			h.remove()
 
 
-def main(expid, dataset, net_type, num_cls, num_insts, batch, m_batch, num_updates, num_inner_updates, lr, meta_lr):
+def main(expid, dataset, net_type, num_cls, num_insts, m_batch, batch, num_updates, num_inner_updates, lr, meta_lr):
 
 	output = '../output/{}'.format(expid)
 
@@ -213,7 +263,10 @@ def main(expid, dataset, net_type, num_cls, num_insts, batch, m_batch, num_updat
 	except Exception as err:
 		print err
 
+
 	loss_fn = CrossEntropyLoss()
+	# loss_fn = MSELoss()
+
 	learner = MAML(dataset, net_type, num_cls, num_insts, m_batch, float(meta_lr), batch, float(lr), num_updates, num_inner_updates, loss_fn)
 	learner.train(expid)
 
@@ -230,5 +283,20 @@ if __name__ == "__main__":
 	lr = float(sys.argv[10])	# Learning rate
 	meta_lr = float(sys.argv[11])	# Meta learning rate
 
-	main(expid, dataset, net_type, num_cls, num_insts, batch, m_batch, num_updates, num_inner_updates, lr, meta_lr)
+	print "=" * 100
+	print "Arguments"
+	print "Experiment ID: ", expid
+	print "Dataset: ", dataset
+	print "Net type: ", net_type
+	print "Num classes: ", num_cls
+	print "Num instances per class: ", num_insts
+	print "Inner Batch size: ", batch
+	print "Meta batch size: ", m_batch
+	print "Num updates to main net: ", num_updates
+	print "Gradient lookahead: ", num_inner_updates
+	print "Main net LR: ", lr
+	print "Meta net LR: ", meta_lr
+	print "=" * 100
+
+	main(expid, dataset, net_type, num_cls, num_insts, m_batch, batch, num_updates, num_inner_updates, lr, meta_lr)
 

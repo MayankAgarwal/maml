@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.sampler import Sampler
 import torchvision.transforms as transforms
 
-from FewShotDatasets import MNIST
+from FewShotDatasets import MNIST, Sinusoidal, Omniglot
 
 class ClassBalancedSampler(Sampler):
 
@@ -43,6 +43,11 @@ def get_data_loader(task, batch_size=1, split='train'):
 	if task.dataset == 'mnist':
 		#normalize = transforms.Normalize(mean=[0.13066, 0.13066, 0.13066], std=[0.30131, 0.30131, 0.30131])
 		dset = MNIST(task, transforms=None, split=split)
+	elif task.dataset == 'sinusoid_reg':
+		dset = Sinusoidal(task, transforms=None, split=split)
+	elif task.dataset == 'omniglot':
+		resize = transforms.Resize((28, 28)) # Images are
+		dset = Omniglot(task, transforms=transforms.Compose([resize, transforms.ToTensor()]), split=split)
 
 	batch_cutoff = None if split!='train' else batch_size
 

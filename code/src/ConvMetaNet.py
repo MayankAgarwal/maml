@@ -8,16 +8,16 @@ from torch.autograd import Variable
 from score_utils import *
 from dataloader_utils import *
 
-from FC_Net import FC_Net
+from ConvNet import ConvNet
 
-class FC_MetaNet(FC_Net):
+class ConvMetaNet(ConvNet):
 	"""
 	Meta-network FC Net
 	"""
 
-	def __init__(self, num_classes, input_dim, loss_fn, num_meta_updates, step_size, batch_size, meta_batch_size, dtype=torch.FloatTensor, long_dtype=torch.LongTensor):
+	def __init__(self, num_classes, input_channels, loss_fn, num_meta_updates, step_size, batch_size, meta_batch_size, dtype=torch.FloatTensor, long_dtype=torch.LongTensor):
 
-		super(FC_MetaNet, self).__init__(num_classes, input_dim, loss_fn, dtype)
+		super(ConvMetaNet, self).__init__(num_classes, input_channels, loss_fn, dtype)
 
 		self.num_meta_updates = num_meta_updates
 		self.step_size = step_size
@@ -27,7 +27,7 @@ class FC_MetaNet(FC_Net):
 		self.long_dtype = long_dtype
 
 	def net_forward(self, x, weights=None):
-		return super(FC_MetaNet, self).forward(x, weights)
+		return super(ConvMetaNet, self).forward(x, weights)
 
 	def forward_pass(self, in_, target, weights=None):
 		input_var = Variable(in_).type(self.dtype)

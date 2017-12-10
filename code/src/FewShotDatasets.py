@@ -50,3 +50,38 @@ class MNIST(FewShotDataset):
 			target = self.target_transforms(target)
 
 		return img, target
+
+class Sinusoidal(FewShotDataset):
+
+	def __init__(self, *args, **kwargs):
+		super(Sinusoidal, self).__init__(*args, **kwargs)
+
+	def __getitem__(self, idx):
+		x = np.array([self.input_ids[idx]], dtype=np.float32)
+		y = self.labels[idx]
+
+		return x, y
+
+
+class Omniglot(FewShotDataset):
+
+	def __init__(self, *args, **kwargs):
+		super(Omniglot, self).__init__(*args, **kwargs)
+
+	def load_image(self, idx):
+		im = Image.open('{}/{}'.format(self.root, idx)).convert('RGB')
+		# im = np.array(im, dtype=np.float32)
+		return im 
+
+	def __getitem__(self, idx):
+		img_id = self.input_ids[idx]
+		img = self.load_image(img_id)
+
+		if self.transforms is not None:
+			img = self.transforms(img)
+
+		target = self.labels[idx]
+		if self.target_transforms is not None:
+			target = self.target_transforms(target)
+
+		return img, target
